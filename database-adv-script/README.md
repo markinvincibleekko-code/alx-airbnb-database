@@ -263,3 +263,449 @@ After completing this task:
 **Project**: ALX AirBnB Database - Advanced SQL Querying  
 **Task**: 0 - Write Complex Queries with Joins  
 **Status**: ✅ Complete
+# Task 1: Practice Subqueries
+
+## Objective
+Master both correlated and non-correlated subqueries to perform advanced data retrieval and filtering operations in SQL.
+
+## Files
+- `subqueries.sql` - Contains all subquery implementations
+
+---
+
+## Understanding Subqueries
+
+### What is a Subquery?
+A subquery (also called an inner query or nested query) is a SQL query nested inside a larger query. It can be used in SELECT, INSERT, UPDATE, or DELETE statements.
+
+### Types of Subqueries
+
+#### 1. **Non-Correlated Subquery**
+- Executes **independently** of the outer query
+- Runs **once** and returns result to outer query
+- Can be executed standalone
+- Generally **faster** for large datasets
+
+#### 2. **Correlated Subquery**
+- References columns from the **outer query**
+- Executes **repeatedly** (once per row of outer query)
+- Cannot be executed independently
+- Generally **slower** but more flexible
+
+---
+
+## Required Queries Implementation
+
+### Query 1: Non-Correlated Subquery
+**Objective**: Find all properties where the average rating is greater than 4.0
+
+#### Understanding the Query:
+```sql
+SELECT p.property_id, p.name, p.city, p.country
+FROM Property p
+WHERE p.property_id IN (
+    SELECT r.property_id
+    FROM Review r
+    GROUP BY r.property_id
+    HAVING AVG(r.rating) > 4.0
+);
+```
+
+#### How It Works:
+1. **Inner Query (Subquery)** runs first:
+   - Groups reviews by property
+   - Calculates average rating for each property
+   - Filters properties with average > 4.0
+   - Returns list of property_ids
+
+2. **Outer Query** runs second:
+   - Selects properties from Property table
+   - Filters only those property_ids returned by subquery
+
+#### Why Non-Correlated?
+- The subquery doesn't reference any columns from the outer query
+- It can run independently: `SELECT property_id FROM Review GROUP BY property_id HAVING AVG(rating) > 4.0`
+- It executes **once** and returns a result set
+
+#### Expected Results:
+Based on the seed data, this should return properties like:
+- Cozy Downtown Apartment (multiple 5-star reviews)
+- Beach House Paradise (5-star reviews)
+- Manhattan Luxury Loft (4-star reviews)
+
+---
+
+### Query 2: Correlated Subquery
+**Objective**: Find users who have made more than 3 bookings
+
+#### Understanding the Query:
+```sql
+SELECT 
+    u.user_id,
+    u.first_name,
+    u.last_name,
+    u.email,
+    (SELECT COUNT(*) 
+     FROM Booking b 
+     WHERE b.user_id = u.user_id) AS total_bookings
+FROM User u
+WHERE (
+    SELECT COUNT(*) 
+    FROM Booking b 
+    WHERE b.user_id = u.user_id
+) > 3;
+```
+
+#### How It Works:
+1. **Outer Query** starts processing User table row by row
+
+2. **Inner Query (Correlated Subquery)** executes for each user:
+   - References `u.user_id` from outer query (correlation)
+   - Counts bookings for that specific user
+   - Returns the count
+
+3. **Filter** applies: Only users with count > 3 are returned
+
+#### Why Correlated?
+- The subquery references `u.user_id` from the outer query
+- It **cannot** run independently (no `u.user_id` context)
+- It executes **multiple times** (once per user in User table)
+
+#### Execution Flow:
+```
+For each user in User table:
+  1. Get user_id from current row
+  2. Count bookings WHERE booking.user_id = this user_id
+  3. If count > 3, include this user in results
+```
+
+#### Performance Note:
+Correlated subqueries can be slower on large datasets because they execute repeatedly. Consider using JOINs with GROUP BY for better performance.
+
+#### Expected Results:
+Based on the seed data (15 bookings, 8 guests):
+- Most users have 1-2 bookings
+- Some users might have no results if none exceed 3 bookings
+- Adjust threshold to test: change `> 3` to `> 0` to see all users with bookings
+
+---
+
+## Query Comparison: Subquery vs JOIN
+
+### Same Result, Different Approach:
+
+#### Using Subquery (Non-Correlated):
+```sql
+SELECT p.name
+FROM Property p
+WHERE p.property_id IN (
+    SELECT property_id 
+    FROM Review 
+    GROUP BY property_id 
+    HAVING AVG(rating) > 4.0
+);
+```
+
+#### Using JOIN (Often Faster):
+```sql
+SELECT p.name
+FROM Property p
+INNER JOIN (
+    SELECT property_id, AVG(rating) as avg_rating
+    FROM Review
+    GROUP BY property_id
+    HAVING AVG(rating) > 4.0
+) r ON p.property_id = r.property_id;
+```
+
+**When to Use Subqueries vs JOINs?**
+- **Subqueries**: Better for existence checks (EXISTS), better readability for complex conditions
+- **JOINs**: Generally faster, better for retrieving data from multiple tables
+
+---
+
+## Subquery Locations
+
+Subqueries can appear in different parts of SQL statements:
+
+### 1. In SELECT Clause (Scalar Subquery)
+```sql
+SELECT 
+    p.name,
+    (SELECT AVG(rating) FROM Review r WHERE r.property_id = p.property_id) AS avg_rating
+FROM Property p;
+```
+
+### 2. In WHERE Clause
+```sql
+SELECT * FROM Property
+WHERE property_id IN (SELECT property_id FROM Review WHERE rating = 5);
+```
+
+### 3. In FROM Clause (Derived Table)
+```sql
+SELECT * FROM (
+    SELECT property_id, AVG(rating) as avg_rating
+    FROM Review
+    GROUP BY property_id
+) AS property_ratings
+WHERE avg_rating > 4.0;
+```
+
+### 4. In HAVING Clause
+```sql
+SELECT property_id, COUNT(*) as review_count
+FROM Review
+GROUP BY property_id
+HAVING COUNT(*) > (SELECT AVG(review_count) FROM (
+    SELECT COUNT(*) as review_count 
+    FROM Review 
+    GROUP BY property_id
+) AS counts);
+```
+
+---
+
+## Subquery Operators
+
+### IN Operator
+```sql
+WHERE property_id IN (SELECT property_id FROM Review WHERE rating > 4)
+```
+Checks if value exists in subquery result set.
+
+### EXISTS Operator
+```sql
+WHERE EXISTS (SELECT 1 FROM Booking b WHERE b.user_id = u.user_id)
+```
+Returns TRUE if subquery returns any rows. More efficient than IN for large datasets.
+
+### NOT EXISTS Operator
+```sql
+WHERE NOT EXISTS (SELECT 1 FROM Booking b WHERE b.user_id = u.user_id)
+```
+Finds records that don't have matching records in subquery.
+
+### Comparison Operators (=, >, <, >=, <=, !=)
+```sql
+WHERE total_price > (SELECT AVG(total_price) FROM Booking)
+```
+
+### ALL Operator
+```sql
+WHERE rating > ALL (SELECT rating FROM Review WHERE property_id = '123')
+```
+Compares to all values returned by subquery.
+
+### ANY/SOME Operator
+```sql
+WHERE rating > ANY (SELECT rating FROM Review WHERE property_id = '123')
+```
+Compares to any value returned by subquery.
+
+---
+
+## Bonus Queries Explained
+
+### Find Users Who Have Never Made a Booking
+```sql
+SELECT u.* FROM User u
+WHERE NOT EXISTS (
+    SELECT 1 FROM Booking b WHERE b.user_id = u.user_id
+);
+```
+**Use Case**: Identify inactive users, target for marketing campaigns
+
+### Find Properties That Have Never Been Booked
+```sql
+SELECT p.* FROM Property p
+WHERE NOT EXISTS (
+    SELECT 1 FROM Booking b WHERE b.property_id = p.property_id
+);
+```
+**Use Case**: Identify underperforming properties, adjust pricing or marketing
+
+### Find Properties with Ratings Above Overall Average
+```sql
+SELECT p.name, AVG(r.rating) as avg_rating
+FROM Property p
+JOIN Review r ON p.property_id = r.property_id
+GROUP BY p.property_id
+HAVING AVG(r.rating) > (SELECT AVG(rating) FROM Review);
+```
+**Use Case**: Highlight top-performing properties, "Featured" listings
+
+---
+
+## Performance Considerations
+
+### 1. Correlated Subqueries Can Be Slow
+**Problem**: Executes once per row of outer query
+```sql
+-- Slow for large tables
+SELECT u.*, 
+    (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id)
+FROM User u;
+```
+
+**Solution**: Use JOIN instead
+```sql
+-- Faster alternative
+SELECT u.*, COUNT(b.booking_id) as booking_count
+FROM User u
+LEFT JOIN Booking b ON u.user_id = b.user_id
+GROUP BY u.user_id;
+```
+
+### 2. Use EXISTS Instead of IN for Large Datasets
+**Why?**: EXISTS stops searching once it finds a match
+
+```sql
+-- Better performance
+WHERE EXISTS (SELECT 1 FROM Booking b WHERE b.user_id = u.user_id)
+
+-- vs
+WHERE user_id IN (SELECT user_id FROM Booking)
+```
+
+### 3. Index Foreign Key Columns
+Ensure indexes exist on:
+- `Booking.user_id`
+- `Booking.property_id`
+- `Review.property_id`
+
+### 4. Use EXPLAIN to Analyze Performance
+```sql
+EXPLAIN SELECT * FROM Property p
+WHERE p.property_id IN (
+    SELECT property_id FROM Review GROUP BY property_id HAVING AVG(rating) > 4.0
+);
+```
+
+---
+
+## Testing the Queries
+
+### Test Query 1 (Non-Correlated)
+```sql
+-- First, check which properties have reviews
+SELECT property_id, AVG(rating) as avg_rating, COUNT(*) as review_count
+FROM Review
+GROUP BY property_id
+ORDER BY avg_rating DESC;
+
+-- Then run the subquery
+SELECT p.property_id, p.name, p.city
+FROM Property p
+WHERE p.property_id IN (
+    SELECT property_id FROM Review GROUP BY property_id HAVING AVG(rating) > 4.0
+);
+```
+
+**Expected**: Properties with 4+ star average ratings
+
+### Test Query 2 (Correlated)
+```sql
+-- First, check booking counts per user
+SELECT user_id, COUNT(*) as booking_count
+FROM Booking
+GROUP BY user_id
+ORDER BY booking_count DESC;
+
+-- Adjust threshold based on data
+SELECT u.user_id, u.first_name, u.last_name,
+    (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id) as bookings
+FROM User u
+WHERE (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id) > 1;
+```
+
+**Expected**: Users with more than specified number of bookings
+
+---
+
+## Common Mistakes to Avoid
+
+### 1. Using Column Alias in WHERE
+```sql
+-- WRONG ❌
+SELECT u.*, (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id) as cnt
+FROM User u
+WHERE cnt > 3;
+
+-- CORRECT ✓
+SELECT * FROM (
+    SELECT u.*, (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id) as cnt
+    FROM User u
+) tmp
+WHERE tmp.cnt > 3;
+```
+
+### 2. Forgetting GROUP BY with Aggregate Functions
+```sql
+-- WRONG ❌
+SELECT property_id FROM Review HAVING AVG(rating) > 4.0;
+
+-- CORRECT ✓
+SELECT property_id FROM Review GROUP BY property_id HAVING AVG(rating) > 4.0;
+```
+
+### 3. Using SELECT * in Subqueries When Not Needed
+```sql
+-- INEFFICIENT ❌
+WHERE EXISTS (SELECT * FROM Booking b WHERE b.user_id = u.user_id)
+
+-- EFFICIENT ✓
+WHERE EXISTS (SELECT 1 FROM Booking b WHERE b.user_id = u.user_id)
+```
+
+---
+
+## Advanced Techniques
+
+### Nested Subqueries (Subquery within Subquery)
+```sql
+SELECT p.name
+FROM Property p
+WHERE p.pricepernight > (
+    SELECT AVG(pricepernight)
+    FROM Property
+    WHERE city IN (
+        SELECT city FROM Property GROUP BY city HAVING COUNT(*) > 2
+    )
+);
+```
+
+### Correlated Subquery with Multiple Conditions
+```sql
+SELECT u.*
+FROM User u
+WHERE (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id) > 3
+  AND (SELECT SUM(total_price) FROM Booking b WHERE b.user_id = u.user_id) > 1000;
+```
+
+---
+
+## Summary
+
+| Feature | Non-Correlated | Correlated |
+|---------|----------------|------------|
+| **Independence** | Runs independently | Depends on outer query |
+| **Execution** | Once | Once per outer row |
+| **Performance** | Generally faster | Can be slower |
+| **Use Case** | Fixed filtering conditions | Row-by-row comparisons |
+| **Readability** | Often clearer | More complex |
+
+---
+
+## Next Steps
+
+1. Test all queries with your database
+2. Use EXPLAIN to analyze performance
+3. Try converting correlated subqueries to JOINs
+4. Move to Task 2: Aggregations and Window Functions
+
+---
+
+**Project**: ALX AirBnB Database - Advanced SQL Querying  
+**Task**: 1 - Practice Subqueries  
+**Status**: ✅ Complete
