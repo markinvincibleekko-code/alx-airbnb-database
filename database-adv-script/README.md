@@ -709,3 +709,511 @@ WHERE (SELECT COUNT(*) FROM Booking b WHERE b.user_id = u.user_id) > 3
 **Project**: ALX AirBnB Database - Advanced SQL Querying  
 **Task**: 1 - Practice Subqueries  
 **Status**: ✅ Complete
+
+# Task 2: Apply Aggregations and Window Functions
+
+## Objective
+Master SQL aggregation functions and window functions to perform advanced data analysis, ranking, and statistical operations on the AirBnB database.
+
+## Files
+- `aggregations_and_window_functions.sql` - Complete SQL implementation
+
+---
+
+## Table of Contents
+1. [Aggregation Functions](#aggregation-functions)
+2. [Window Functions](#window-functions)
+3. [Required Queries](#required-queries)
+4. [Advanced Examples](#advanced-examples)
+5. [Performance Tips](#performance-tips)
+
+---
+
+## Aggregation Functions
+
+### What are Aggregation Functions?
+Aggregation functions perform calculations on a set of rows and return a single value. They are typically used with `GROUP BY` clause.
+
+### Common Aggregate Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `COUNT()` | Counts rows | `COUNT(booking_id)` |
+| `SUM()` | Adds values | `SUM(total_price)` |
+| `AVG()` | Calculates average | `AVG(rating)` |
+| `MIN()` | Finds minimum | `MIN(pricepernight)` |
+| `MAX()` | Finds maximum | `MAX(total_price)` |
+| `STDDEV()` | Standard deviation | `STDDEV(pricepernight)` |
+| `VARIANCE()` | Variance | `VARIANCE(rating)` |
+
+---
+
+## Window Functions
+
+### What are Window Functions?
+Window functions perform calculations across a set of rows related to the current row, WITHOUT collapsing rows like GROUP BY does.
+
+### Common Window Functions
+
+| Function | Description | Use Case |
+|----------|-------------|----------|
+| `ROW_NUMBER()` | Sequential number (no ties) | Pagination, unique ranking |
+| `RANK()` | Ranking with gaps for ties | Competition ranking |
+| `DENSE_RANK()` | Ranking without gaps | Academic grading |
+| `NTILE(n)` | Divides into n groups | Quartiles, deciles |
+| `LAG()` | Previous row value | Trend analysis |
+| `LEAD()` | Next row value | Forecasting |
+| `SUM() OVER()` | Running total | Cumulative metrics |
+| `AVG() OVER()` | Moving average | Time series analysis |
+
+---
+
+## Required Queries
+
+### Query 1: Total Bookings per User (Aggregation)
+
+#### Basic Implementation
+```sql
+SELECT 
+    u.user_id,
+    u.first_name,
+    u.last_name,
+    u.email,
+    COUNT(b.booking_id) AS total_bookings
+FROM User u
+LEFT JOIN Booking b ON u.user_id = b.user_id
+GROUP BY u.user_id, u.first_name, u.last_name, u.email
+ORDER BY total_bookings DESC;
+```
+
+#### How It Works:
+1. **LEFT JOIN**: Includes all users, even those without bookings
+2. **COUNT()**: Counts booking_id for each user
+3. **GROUP BY**: Groups results by user (all non-aggregated columns must be in GROUP BY)
+4. **ORDER BY**: Sorts by booking count (highest first)
+
+#### Key Components:
+
+**LEFT JOIN vs INNER JOIN:**
+- `LEFT JOIN` - Shows all users (including those with 0 bookings)
+- `INNER JOIN` - Shows only users with at least 1 booking
+
+**COUNT vs COUNT(*):**
+- `COUNT(b.booking_id)` - Counts non-NULL booking_ids
+- `COUNT(*)` - Counts all rows (including NULLs)
+
+#### Expected Output:
+```
+user_id     | first_name | last_name | email                      | total_bookings
+------------|------------|-----------|----------------------------|---------------
+550e...011  | Jane       | Smith     | jane.smith@example.com     | 3
+550e...012  | David      | Brown     | david.brown@example.com    | 2
+550e...013  | Lisa       | Anderson  | lisa.anderson@example.com  | 2
+550e...020  | Admin      | User      | admin@airbnb.com           | 0
+```
+
+#### Enhanced Version with Multiple Aggregations:
+```sql
+SELECT 
+    u.user_id,
+    u.first_name,
+    u.last_name,
+    COUNT(b.booking_id) AS total_bookings,
+    SUM(b.total_price) AS total_spent,
+    AVG(b.total_price) AS avg_booking_value,
+    MIN(b.total_price) AS min_booking,
+    MAX(b.total_price) AS max_booking
+FROM User u
+LEFT JOIN Booking b ON u.user_id = b.user_id
+GROUP BY u.user_id, u.first_name, u.last_name
+ORDER BY total_bookings DESC;
+```
+
+---
+
+### Query 2: Rank Properties by Bookings (Window Functions)
+
+#### Using ROW_NUMBER()
+```sql
+SELECT 
+    p.property_id,
+    p.name AS property_name,
+    p.city,
+    COUNT(b.booking_id) AS total_bookings,
+    ROW_NUMBER() OVER (ORDER BY COUNT(b.booking_id) DESC) AS row_number_rank
+FROM Property p
+LEFT JOIN Booking b ON p.property_id = b.property_id
+GROUP BY p.property_id, p.name, p.city
+ORDER BY row_number_rank;
+```
+
+**ROW_NUMBER() Characteristics:**
+- Assigns **unique** sequential numbers
+- Even if properties have same booking count, they get different ranks
+- No gaps in numbering: 1, 2, 3, 4, 5...
+- **Best for**: Pagination, when you need unique identifiers
+
+#### Using RANK()
+```sql
+SELECT 
+    p.property_id,
+    p.name AS property_name,
+    COUNT(b.booking_id) AS total_bookings,
+    RANK() OVER (ORDER BY COUNT(b.booking_id) DESC) AS booking_rank
+FROM Property p
+LEFT JOIN Booking b ON p.property_id = b.property_id
+GROUP BY p.property_id, p.name
+ORDER BY booking_rank;
+```
+
+**RANK() Characteristics:**
+- Same values get **same rank**
+- **Skips** numbers after ties
+- Example: 1, 2, 2, 4, 5 (skips 3)
+- **Best for**: Competition-style ranking (Olympic medals)
+
+#### Using DENSE_RANK()
+```sql
+SELECT 
+    p.property_id,
+    p.name AS property_name,
+    COUNT(b.booking_id) AS total_bookings,
+    DENSE_RANK() OVER (ORDER BY COUNT(b.booking_id) DESC) AS dense_rank
+FROM Property p
+LEFT JOIN Booking b ON p.property_id = b.property_id
+GROUP BY p.property_id, p.name
+ORDER BY dense_rank;
+```
+
+**DENSE_RANK() Characteristics:**
+- Same values get **same rank**
+- **No gaps** in numbering after ties
+- Example: 1, 2, 2, 3, 4 (no gap)
+- **Best for**: Academic grading, when you want consecutive ranks
+
+#### Comparison Example:
+
+| Property | Bookings | ROW_NUMBER | RANK | DENSE_RANK |
+|----------|----------|------------|------|------------|
+| Beach House | 5 | 1 | 1 | 1 |
+| Downtown Apt | 5 | 2 | 1 | 1 |
+| Loft | 3 | 3 | 3 | 2 |
+| Studio | 2 | 4 | 4 | 3 |
+| Condo | 2 | 5 | 4 | 3 |
+
+---
+
+## Understanding Window Function Syntax
+
+### Basic Syntax:
+```sql
+window_function() OVER (
+    [PARTITION BY column]
+    [ORDER BY column]
+    [ROWS or RANGE frame_specification]
+)
+```
+
+### Components:
+
+**1. PARTITION BY** (Optional)
+- Divides result set into partitions
+- Window function applies separately to each partition
+- Like GROUP BY, but doesn't collapse rows
+
+```sql
+-- Rank properties within each city
+RANK() OVER (PARTITION BY p.city ORDER BY COUNT(b.booking_id) DESC)
+```
+
+**2. ORDER BY** (Required for most window functions)
+- Defines order for window function calculation
+- Different from query-level ORDER BY
+
+**3. Frame Specification** (Optional)
+- Defines which rows to include in calculation
+- `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
+- `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING`
+
+---
+
+## Advanced Window Function Examples
+
+### Running Total (Cumulative Sum)
+```sql
+SELECT 
+    booking_id,
+    created_at,
+    total_price,
+    SUM(total_price) OVER (ORDER BY created_at) AS running_total
+FROM Booking
+ORDER BY created_at;
+```
+
+### Moving Average (Last 3 bookings)
+```sql
+SELECT 
+    booking_id,
+    created_at,
+    total_price,
+    AVG(total_price) OVER (
+        ORDER BY created_at 
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    ) AS moving_avg_3
+FROM Booking;
+```
+
+### Partition by City
+```sql
+SELECT 
+    p.property_id,
+    p.name,
+    p.city,
+    COUNT(b.booking_id) AS bookings,
+    RANK() OVER (PARTITION BY p.city ORDER BY COUNT(b.booking_id) DESC) AS city_rank,
+    RANK() OVER (ORDER BY COUNT(b.booking_id) DESC) AS overall_rank
+FROM Property p
+LEFT JOIN Booking b ON p.property_id = b.property_id
+GROUP BY p.property_id, p.name, p.city
+ORDER BY p.city, city_rank;
+```
+
+### LAG and LEAD (Compare with Previous/Next)
+```sql
+SELECT 
+    user_id,
+    created_at AS booking_date,
+    total_price,
+    LAG(created_at) OVER (PARTITION BY user_id ORDER BY created_at) AS previous_booking,
+    LEAD(created_at) OVER (PARTITION BY user_id ORDER BY created_at) AS next_booking,
+    total_price - LAG(total_price) OVER (PARTITION BY user_id ORDER BY created_at) AS price_change
+FROM Booking;
+```
+
+---
+
+## Common Patterns and Use Cases
+
+### 1. Top N per Group
+```sql
+-- Top 3 properties per city by bookings
+SELECT * FROM (
+    SELECT 
+        p.city,
+        p.name,
+        COUNT(b.booking_id) AS bookings,
+        ROW_NUMBER() OVER (PARTITION BY p.city ORDER BY COUNT(b.booking_id) DESC) AS rn
+    FROM Property p
+    LEFT JOIN Booking b ON p.property_id = b.property_id
+    GROUP BY p.property_id, p.city, p.name
+) ranked
+WHERE rn <= 3;
+```
+
+### 2. Percentage of Total
+```sql
+SELECT 
+    p.property_id,
+    p.name,
+    COUNT(b.booking_id) AS bookings,
+    COUNT(b.booking_id) * 100.0 / SUM(COUNT(b.booking_id)) OVER () AS percentage_of_total
+FROM Property p
+LEFT JOIN Booking b ON p.property_id = b.property_id
+GROUP BY p.property_id, p.name;
+```
+
+### 3. Quartile Analysis
+```sql
+SELECT 
+    property_id,
+    name,
+    pricepernight,
+    NTILE(4) OVER (ORDER BY pricepernight) AS price_quartile
+FROM Property;
+```
+
+---
+
+## Key Differences: Aggregation vs Window Functions
+
+| Feature | Aggregation (GROUP BY) | Window Functions |
+|---------|------------------------|------------------|
+| **Rows returned** | One per group | Same as input |
+| **Collapse rows?** | Yes | No |
+| **Access to individual rows** | No | Yes |
+| **Use with GROUP BY** | Required for non-aggregated columns | Can use after GROUP BY |
+| **Example** | `SUM(price) GROUP BY user` | `SUM(price) OVER (PARTITION BY user)` |
+
+### Example Comparison:
+
+**Aggregation (collapses rows):**
+```sql
+SELECT city, COUNT(*) AS property_count
+FROM Property
+GROUP BY city;
+-- Returns: 3 rows (one per city)
+```
+
+**Window Function (keeps all rows):**
+```sql
+SELECT 
+    property_id,
+    name,
+    city,
+    COUNT(*) OVER (PARTITION BY city) AS properties_in_city
+FROM Property;
+-- Returns: 10 rows (all properties, each showing city count)
+```
+
+---
+
+## Performance Optimization
+
+### 1. Index Foreign Keys
+```sql
+CREATE INDEX idx_booking_user ON Booking(user_id);
+CREATE INDEX idx_booking_property ON Booking(property_id);
+```
+
+### 2. Avoid Window Functions in WHERE Clause
+```sql
+-- DON'T DO THIS ❌
+SELECT * FROM (
+    SELECT *, ROW_NUMBER() OVER (ORDER BY created_at) AS rn
+    FROM Booking
+)
+WHERE rn = 1;
+
+-- BETTER ✓
+SELECT * FROM Booking ORDER BY created_at LIMIT 1;
+```
+
+### 3. Use Appropriate Function
+- `ROW_NUMBER()` is usually faster than `RANK()` or `DENSE_RANK()`
+- Use `EXISTS` instead of `COUNT(*)` for existence checks
+- Consider materialized views for complex aggregations
+
+### 4. Analyze Query Performance
+```sql
+EXPLAIN SELECT 
+    u.user_id,
+    COUNT(b.booking_id) AS total_bookings
+FROM User u
+LEFT JOIN Booking b ON u.user_id = b.user_id
+GROUP BY u.user_id;
+```
+
+---
+
+## Common Mistakes to Avoid
+
+### 1. Forgetting GROUP BY columns
+```sql
+-- ERROR ❌
+SELECT user_id, first_name, COUNT(booking_id)
+FROM User u
+JOIN Booking b ON u.user_id = b.user_id
+GROUP BY user_id;  -- Missing first_name
+
+-- CORRECT ✓
+GROUP BY user_id, first_name;
+```
+
+### 2. Using aggregate in WHERE instead of HAVING
+```sql
+-- ERROR ❌
+SELECT user_id, COUNT(*) 
+FROM Booking 
+WHERE COUNT(*) > 3  -- Can't use aggregate in WHERE
+GROUP BY user_id;
+
+-- CORRECT ✓
+HAVING COUNT(*) > 3;  -- Use HAVING for aggregate conditions
+```
+
+### 3. Mixing window functions incorrectly
+```sql
+-- ERROR ❌
+SELECT 
+    user_id,
+    COUNT(*) AS bookings,  -- Aggregation
+    ROW_NUMBER() OVER (ORDER BY user_id) AS rn  -- Window function on wrong level
+FROM Booking
+GROUP BY user_id;
+
+-- CORRECT ✓
+SELECT 
+    user_id,
+    bookings,
+    ROW_NUMBER() OVER (ORDER BY bookings DESC) AS rn
+FROM (
+    SELECT user_id, COUNT(*) AS bookings
+    FROM Booking
+    GROUP BY user_id
+) subquery;
+```
+
+---
+
+## Testing Your Queries
+
+### Test Query 1: Aggregation
+```sql
+-- Verify counts
+SELECT 
+    (SELECT COUNT(DISTINCT user_id) FROM User) AS total_users,
+    (SELECT COUNT(DISTINCT user_id) FROM Booking) AS users_with_bookings,
+    (SELECT COUNT(*) FROM Booking) AS total_bookings;
+
+-- Then run your aggregation query and verify numbers match
+```
+
+### Test Query 2: Window Functions
+```sql
+-- Verify ranking logic
+SELECT 
+    property_id,
+    total_bookings,
+    row_num,
+    rnk,
+    dense_rnk,
+    CASE 
+        WHEN row_num = rnk AND rnk = dense_rnk THEN 'All same (no ties)'
+        WHEN rnk != row_num THEN 'Ties detected'
+    END AS ranking_notes
+FROM (
+    SELECT 
+        p.property_id,
+        COUNT(b.booking_id) AS total_bookings,
+        ROW_NUMBER() OVER (ORDER BY COUNT(b.booking_id) DESC) AS row_num,
+        RANK() OVER (ORDER BY COUNT(b.booking_id) DESC) AS rnk,
+        DENSE_RANK() OVER (ORDER BY COUNT(b.booking_id) DESC) AS dense_rnk
+    FROM Property p
+    LEFT JOIN Booking b ON p.property_id = b.property_id
+    GROUP BY p.property_id
+) ranked;
+```
+
+---
+
+## Summary
+
+### Key Takeaways:
+1. **Aggregation functions** reduce multiple rows to single values
+2. **Window functions** preserve all rows while adding calculations
+3. **ROW_NUMBER** = unique ranks, **RANK** = gaps after ties, **DENSE_RANK** = no gaps
+4. Use **PARTITION BY** to create groups within window functions
+5. **OVER()** clause is essential for window functions
+
+### When to Use What:
+- Need totals/counts per group? → **GROUP BY with COUNT/SUM**
+- Need running totals? → **SUM() OVER()**
+- Need ranking? → **ROW_NUMBER/RANK/DENSE_RANK**
+- Need comparison with previous row? → **LAG/LEAD**
+- Need to divide into groups? → **NTILE()**
+
+---
+
+**Project**: ALX AirBnB Database - Advanced SQL Querying  
+**Task**: 2 - Apply Aggregations and Window Functions  
+**Status**: ✅ Complete
